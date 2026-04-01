@@ -9,6 +9,7 @@ Thumbs.db
 
 # Go build artifacts
 bin/
+.cache/
 *.exe
 *.exe~
 *.dll
@@ -17,6 +18,7 @@ bin/
 *.test
 *.out
 coverage.out
+coverage
 .coverprofile
 
 # Python artifacts
