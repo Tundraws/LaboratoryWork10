@@ -1,0 +1,44 @@
+# OS and editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Git artifacts
+*.orig
+
+# Go build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+.coverprofile
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+htmlcov/
+.coverage
+
+# Node artifacts
+node_modules/
+
+# Docker / misc
+*.log
