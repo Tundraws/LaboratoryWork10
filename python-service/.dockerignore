@@ -1,0 +1,8 @@
+.venv/
+.pydeps/
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+.git
+tests/

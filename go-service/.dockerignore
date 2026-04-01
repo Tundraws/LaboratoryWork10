@@ -1,0 +1,6 @@
+.cache/
+coverage
+coverage.out
+*.test
+*.exe
+.git

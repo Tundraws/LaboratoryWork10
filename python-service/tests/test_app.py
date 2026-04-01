@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import jwt
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from app.auth import validate_jwt_token
 from app.client import GoServiceClient
 from app.config import Settings
-from app.main import app, get_go_client, get_settings_dep
+from app.main import app, get_go_client, get_settings_dep, lifespan
 
 
 class FakeGoClient(GoServiceClient):
@@ -144,3 +146,71 @@ async def test_auth_token_proxy(async_client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["type"] == "Bearer"
+
+
+@pytest.mark.asyncio
+async def test_client_methods() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
+        if request.url.path == "/auth/token":
+            return httpx.Response(200, json={"token": "abc", "type": "Bearer"})
+        if request.url.path == "/api/process":
+            return httpx.Response(
+                200,
+                json={
+                    "request_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "approved_by": "student",
+                    "items_count": 1,
+                    "total_amount": 10.0,
+                    "tags": ["study"],
+                    "status": "accepted",
+                },
+            )
+        return httpx.Response(404)
+
+    client = GoServiceClient(Settings(go_service_url="http://testserver", jwt_secret="secret"))
+    await client._client.aclose()
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="http://testserver",
+    )
+
+    assert await client.health() == {"status": "ok"}
+    token_response = await client.request_token("student", "securepass123")
+    assert token_response["token"] == "abc"
+    response = await client.forward_payload(build_payload(), "token")
+    assert response["approved_by"] == "student"
+
+    await client.close()
+
+
+def test_validate_jwt_token_success() -> None:
+    payload = validate_jwt_token(build_token(), "super-secret-key")
+    assert payload["sub"] == "student"
+
+
+@pytest.mark.asyncio
+async def test_lifespan_initializes_and_closes_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+
+    class TrackingClient:
+        def __init__(self, settings: Settings) -> None:
+            self.settings = settings
+            events.append("init")
+
+        async def close(self) -> None:
+            events.append("close")
+
+    settings = Settings(go_service_url="http://go-service:8080", jwt_secret="secret")
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    monkeypatch.setattr("app.main.GoServiceClient", TrackingClient)
+
+    test_fastapi_app = FastAPI()
+    async with lifespan(test_fastapi_app):
+        assert test_fastapi_app.state.settings == settings
+        assert isinstance(test_fastapi_app.state.go_client, TrackingClient)
+        assert get_go_client(type("Req", (), {"app": test_fastapi_app})()) is test_fastapi_app.state.go_client
+        assert get_settings_dep(type("Req", (), {"app": test_fastapi_app})()) == settings
+
+    assert events == ["init", "close"]
